@@ -114,6 +114,11 @@ func (c *C[T]) Err() error {
 	return c.err
 }
 
+// ReadOnly returns a ReadOnly channel view of this channel.
+func (c *C[T]) ReadOnly() ReadOnly[T] {
+	return ReadOnly[T]{c: c}
+}
+
 // Write panic if writing to a closed channel.
 func (c *C[T]) Write(v T) {
 	c.c <- v
@@ -144,4 +149,9 @@ func (c *C[T]) Close() {
 func (c *C[T]) CloseWithError(err error) {
 	c.err = err
 	close(c.c)
+}
+
+// WriteOnly returns a WriteOnly channel view of this channel.
+func (c *C[T]) WriteOnly() WriteOnly[T] {
+	return WriteOnly[T]{c: c}
 }
