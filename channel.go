@@ -140,15 +140,39 @@ func (c *C[T]) WriteChannel() chan<- T {
 	return c.c
 }
 
-// Close is equal to CloseWithError(io.EOF).
-func (c *C[T]) Close() {
-	c.CloseWithError(io.EOF)
+// SetError will panic if an error is already set.
+// It will replace err with io.EOF if err is nil.
+// It will never block.
+// It is not threadsafe with any write operation.
+func (c *C[T]) SetError(err error) {
+	if c.err != nil {
+		panic("setting error on an already errored channel")
+	}
+	if err == nil {
+		err = io.EOF
+	}
+	c.err = err
 }
 
-// CloseWithError is not threadsafe with any write operation, it is threadsafe with read operations.
-func (c *C[T]) CloseWithError(err error) {
-	c.err = err
+// Close will set the error to io.EOF is it is not already set and then close the channel.
+// It will never block.
+// It will panic if trying to close an already closed channel.
+// It is not threadsafe with any write operation.
+func (c *C[T]) Close() {
+	if c.err == nil {
+		c.err = io.EOF
+	}
 	close(c.c)
+}
+
+// CloseWithError will close the channel with the provided error and then close the channel.
+// It will replace err with io.EOF if err is nil.
+// It will never block.
+// It will panic if trying to close an already closed channel.
+// It is not threadsafe with any write operation.
+func (c *C[T]) CloseWithError(err error) {
+	c.SetError(err)
+	c.Close()
 }
 
 // WriteOnly returns a WriteOnly channel view of this channel.
