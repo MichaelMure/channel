@@ -53,6 +53,11 @@ func (c WriteOnly[T]) WriteChannel() chan<- T {
 	return c.c.WriteChannel()
 }
 
+// SetError is the same as C.SetError
+func (c WriteOnly[T]) SetError(err error) {
+	c.c.SetError(err)
+}
+
 // Close is the same as C.Close
 func (c WriteOnly[T]) Close() {
 	c.c.Close()
@@ -68,14 +73,22 @@ type C[T any] struct {
 	err error
 }
 
-// Create a new unbuffered channel.
+// New create a new unbuffered channel.
 func New[T any]() *C[T] {
 	return NewWithSize[T](0)
 }
 
-// Create a new channel of the i size.
+// NewWithSize create a new channel of the i size.
 func NewWithSize[T any](i int) *C[T] {
 	return &C[T]{c: make(chan T, i)}
+}
+
+// NewWithError create an already closed and errored channel.
+// It will replace err with io.EOF if err is nil.
+func NewWithError[T any](err error) *C[T] {
+	c := New[T]()
+	c.CloseWithError(err)
+	return c
 }
 
 // Read returns io.EOF when the channel is closed.
