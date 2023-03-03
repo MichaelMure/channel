@@ -33,6 +33,11 @@ func (c ReadOnly[T]) Rest() ([]T, error) {
 	return c.c.Rest()
 }
 
+// Len is the same as C.Len
+func (c ReadOnly[T]) Len() int {
+	return c.c.Len()
+}
+
 // RestContext is the same as C.RestContext
 func (c ReadOnly[T]) RestContext(ctx context.Context) ([]T, error) {
 	return c.c.RestContext(ctx)
@@ -161,6 +166,12 @@ func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
 		res = append(res, v)
 	}
 	return res, nil
+}
+
+// Len returns the number of elements queued (unread) in the channel buffer.
+// If v is nil, len(v) is zero.
+func (c *C[T]) Len() int {
+	return len(c.c)
 }
 
 // Err allows to access the error when the channel passed by ReadChannel is viewed closed.
