@@ -133,14 +133,14 @@ func (c *C[T]) ReadChannel() <-chan T {
 
 // Rest reads all the values in the channel until it closes, and return them all at once.
 func (c *C[T]) Rest() ([]T, error) {
-	var res []T
+	res := append([]T(nil), make([]T, len(c.c))...) // preallocate space if known.
 	for {
 		v, err := c.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return res, err
 		}
 		res = append(res, v)
 	}
@@ -149,14 +149,14 @@ func (c *C[T]) Rest() ([]T, error) {
 
 // RestContext reads all the values in the channel until it closes, and return them all at once.
 func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
-	var res []T
+	res := append([]T(nil), make([]T, len(c.c))...) // preallocate space if known.
 	for {
 		v, err := c.ReadContext(ctx)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return res, err
 		}
 		res = append(res, v)
 	}
