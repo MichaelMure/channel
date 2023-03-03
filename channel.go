@@ -1,4 +1,4 @@
-// This is a wrapper around channels, it use usefull because it adds an error field which indicate how the request terminated, this can be red by multiple consumers.
+// This is a wrapper around channels, it's useful because it adds an error field which indicate how the request terminated, this can be red by multiple consumers.
 package channel
 
 import (
@@ -26,6 +26,16 @@ func (c ReadOnly[T]) ReadContext(ctx context.Context) (T, error) {
 // ReadChannel is the same as C.ReadChannel
 func (c ReadOnly[T]) ReadChannel() <-chan T {
 	return c.c.ReadChannel()
+}
+
+// Rest is the same as C.Rest
+func (c ReadOnly[T]) Rest() ([]T, error) {
+	return c.c.Rest()
+}
+
+// RestContext is the same as C.RestContext
+func (c ReadOnly[T]) RestContext(ctx context.Context) ([]T, error) {
+	return c.c.RestContext(ctx)
 }
 
 // Err is the same as C.Err
@@ -119,6 +129,38 @@ func (c *C[T]) ReadContext(ctx context.Context) (T, error) {
 // ReadChannel allows to access the underlying channel for use with select, you should use Read and ReadContext when you can.
 func (c *C[T]) ReadChannel() <-chan T {
 	return c.c
+}
+
+// Rest reads all the values in the channel until it closes, and return them all at once.
+func (c *C[T]) Rest() ([]T, error) {
+	var res []T
+	for {
+		v, err := c.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, v)
+	}
+	return res, nil
+}
+
+// RestContext reads all the values in the channel until it closes, and return them all at once.
+func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
+	var res []T
+	for {
+		v, err := c.ReadContext(ctx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, v)
+	}
+	return res, nil
 }
 
 // Err allows to access the error when the channel passed by ReadChannel is viewed closed.
