@@ -28,6 +28,16 @@ func (c ReadOnly[T]) ReadChannel() <-chan T {
 	return c.c.ReadChannel()
 }
 
+// Range is the same as C.Range
+func (c ReadOnly[T]) Range(fn func(T) error) error {
+	return c.c.Range(fn)
+}
+
+// RangeContext is the same as C.RangeContext
+func (c ReadOnly[T]) RangeContext(ctx context.Context, fn func(T) error) error {
+	return c.c.RangeContext(ctx, fn)
+}
+
 // Rest is the same as C.Rest
 func (c ReadOnly[T]) Rest() ([]T, error) {
 	return c.c.Rest()
@@ -136,7 +146,44 @@ func (c *C[T]) ReadChannel() <-chan T {
 	return c.c
 }
 
+// Range iterate on the channel values in the same fashion as for a go channel.
+// It will return an error if either the given function return an error, or the channel carry an error.
+func (c *C[T]) Range(fn func(T) error) error {
+	for {
+		v, err := c.Read()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		err = fn(v)
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// RangeContext iterate on the channel values in the same fashion as for a go channel.
+// It will return an error if the given function return an error, the channel carry an error, or if the context is cancelled.
+func (c *C[T]) RangeContext(ctx context.Context, fn func(T) error) error {
+	for {
+		v, err := c.ReadContext(ctx)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		err = fn(v)
+		if err != nil {
+			return err
+		}
+	}
+}
+
 // Rest reads all the values in the channel until it closes, and return them all at once.
+// If an error occurs, partial results are returned.
 func (c *C[T]) Rest() ([]T, error) {
 	res := append([]T(nil), make([]T, len(c.c))...) // preallocate space if known.
 	for {
@@ -153,6 +200,7 @@ func (c *C[T]) Rest() ([]T, error) {
 }
 
 // RestContext reads all the values in the channel until it closes, and return them all at once.
+// If an error occurs, partial results are returned.
 func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
 	res := append([]T(nil), make([]T, len(c.c))...) // preallocate space if known.
 	for {
