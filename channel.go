@@ -8,91 +8,8 @@ import (
 
 type uncomparable = [0]func()
 
-type ReadOnly[T any] struct {
-	_ uncomparable
-	c *C[T]
-}
-
-// Read is the same C.Read
-func (c ReadOnly[T]) Read() (T, error) {
-	return c.c.Read()
-}
-
-// ReadCtx is the same as C.ReadContext
-func (c ReadOnly[T]) ReadContext(ctx context.Context) (T, error) {
-	return c.c.ReadContext(ctx)
-}
-
-// ReadChannel is the same as C.ReadChannel
-func (c ReadOnly[T]) ReadChannel() <-chan T {
-	return c.c.ReadChannel()
-}
-
-// Range is the same as C.Range
-func (c ReadOnly[T]) Range(fn func(T) error) error {
-	return c.c.Range(fn)
-}
-
-// RangeContext is the same as C.RangeContext
-func (c ReadOnly[T]) RangeContext(ctx context.Context, fn func(T) error) error {
-	return c.c.RangeContext(ctx, fn)
-}
-
-// Rest is the same as C.Rest
-func (c ReadOnly[T]) Rest() ([]T, error) {
-	return c.c.Rest()
-}
-
-// Len is the same as C.Len
-func (c ReadOnly[T]) Len() int {
-	return c.c.Len()
-}
-
-// RestContext is the same as C.RestContext
-func (c ReadOnly[T]) RestContext(ctx context.Context) ([]T, error) {
-	return c.c.RestContext(ctx)
-}
-
-// Err is the same as C.Err
-func (c ReadOnly[T]) Err() error {
-	return c.c.Err()
-}
-
-type WriteOnly[T any] struct {
-	_ uncomparable
-	c *C[T]
-}
-
-// Write is the same as C.Write
-func (c WriteOnly[T]) Write(v T) {
-	c.c.Write(v)
-}
-
-// WriteContext is the same as C.WriteContext
-func (c WriteOnly[T]) WriteContext(ctx context.Context, v T) error {
-	return c.c.WriteContext(ctx, v)
-}
-
-// WriteChannel is the same as C.WriteChannel
-func (c WriteOnly[T]) WriteChannel() chan<- T {
-	return c.c.WriteChannel()
-}
-
-// SetError is the same as C.SetError
-func (c WriteOnly[T]) SetError(err error) {
-	c.c.SetError(err)
-}
-
-// Close is the same as C.Close
-func (c WriteOnly[T]) Close() {
-	c.c.Close()
-}
-
-// CloseWithError is the same as C.CloseWithError
-func (c WriteOnly[T]) CloseWithError(err error) {
-	c.c.CloseWithError(err)
-}
-
+// C is a read-write channel wrapper offering improvements over a normal go channel.
+// It can be declined into read-only and write-only using ReadOnly and WriteOnly.
 type C[T any] struct {
 	c   chan T
 	err error
@@ -116,6 +33,16 @@ func NewWithError[T any](err error) *C[T] {
 	return c
 }
 
+// ReadOnly returns a ReadOnly channel view of this channel.
+func (c *C[T]) ReadOnly() ReadOnly[T] {
+	return ReadOnly[T]{c: c}
+}
+
+// WriteOnly returns a WriteOnly channel view of this channel.
+func (c *C[T]) WriteOnly() WriteOnly[T] {
+	return WriteOnly[T]{c: c}
+}
+
 // Read returns io.EOF when the channel is closed.
 func (c *C[T]) Read() (T, error) {
 	v, ok := <-c.c
@@ -126,7 +53,7 @@ func (c *C[T]) Read() (T, error) {
 	return v, nil
 }
 
-// ReadCtx returns io.EOF when the channel is closed.
+// ReadContext returns io.EOF when the channel is closed.
 func (c *C[T]) ReadContext(ctx context.Context) (T, error) {
 	select {
 	case <-ctx.Done():
@@ -228,11 +155,6 @@ func (c *C[T]) Err() error {
 	return c.err
 }
 
-// ReadOnly returns a ReadOnly channel view of this channel.
-func (c *C[T]) ReadOnly() ReadOnly[T] {
-	return ReadOnly[T]{c: c}
-}
-
 // Write panic if writing to a closed channel.
 func (c *C[T]) Write(v T) {
 	c.c <- v
@@ -287,9 +209,4 @@ func (c *C[T]) Close() {
 func (c *C[T]) CloseWithError(err error) {
 	c.SetError(err)
 	c.Close()
-}
-
-// WriteOnly returns a WriteOnly channel view of this channel.
-func (c *C[T]) WriteOnly() WriteOnly[T] {
-	return WriteOnly[T]{c: c}
 }
