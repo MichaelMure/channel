@@ -38,14 +38,24 @@ func (c ReadOnly[T]) Rest() ([]T, error) {
 	return c.c.Rest()
 }
 
-// Len is the same as C.Len
-func (c ReadOnly[T]) Len() int {
-	return c.c.Len()
-}
-
 // RestContext is the same as C.RestContext
 func (c ReadOnly[T]) RestContext(ctx context.Context) ([]T, error) {
 	return c.c.RestContext(ctx)
+}
+
+// Intercept is the same as C.Intercept, but return a ReadOnly.
+func (c ReadOnly[T]) Intercept(fn func(T) error) ReadOnly[T] {
+	return c.c.Intercept(fn).ReadOnly()
+}
+
+// InterceptContext is the same as C.InterceptContext, but return a ReadOnly.
+func (c ReadOnly[T]) InterceptContext(ctx context.Context, fn func(T) error) ReadOnly[T] {
+	return c.c.InterceptContext(ctx, fn).ReadOnly()
+}
+
+// Len is the same as C.Len
+func (c ReadOnly[T]) Len() int {
+	return c.c.Len()
 }
 
 // Err is the same as C.Err

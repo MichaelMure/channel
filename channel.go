@@ -143,6 +143,57 @@ func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
 	return res, nil
 }
 
+// Intercept construct another C with the given fn intercepting every value read.
+// This is useful for example to write a wrapper operating on an underlying channel.
+// If the intercepting function return an error, the value is not propagated into the output channel.
+func (c *C[T]) Intercept(fn func(T) error) *C[T] {
+	// output with zero capacity, we don't want to add buffering
+	out := New[T]()
+
+	go func() {
+		defer out.Close()
+
+		err := c.Range(func(val T) error {
+			innerErr := fn(val)
+			if innerErr != nil {
+				return innerErr
+			}
+			out.Write(val)
+			return nil
+		})
+		if err != nil {
+			out.SetError(err)
+		}
+	}()
+
+	return out
+}
+
+// InterceptContext construct another C with the given fn intercepting every value read.
+// This is useful for example to write a wrapper operating on an underlying channel.
+// If the intercepting function return an error, the value is not propagated into the output channel.
+func (c *C[T]) InterceptContext(ctx context.Context, fn func(T) error) *C[T] {
+	// output with zero capacity, we don't want to add buffering
+	out := New[T]()
+
+	go func() {
+		defer out.Close()
+
+		err := c.RangeContext(ctx, func(val T) error {
+			innerErr := fn(val)
+			if innerErr != nil {
+				return innerErr
+			}
+			return out.WriteContext(ctx, val)
+		})
+		if err != nil {
+			out.SetError(err)
+		}
+	}()
+
+	return out
+}
+
 // Len returns the number of elements queued (unread) in the channel buffer.
 // If v is nil, len(v) is zero.
 func (c *C[T]) Len() int {
