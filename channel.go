@@ -1,4 +1,4 @@
-// This is a wrapper around channels, it's useful because it adds an error field which indicate how the request terminated, this can be red by multiple consumers.
+// Package channel contains a wrapper around channels, simplifying and expending usage.
 package channel
 
 import (
@@ -43,7 +43,9 @@ func (c *C[T]) WriteOnly() WriteOnly[T] {
 	return WriteOnly[T]{c: c}
 }
 
-// Read returns io.EOF when the channel is closed.
+// Read perform a blocking read on the channel.
+// If the channel is simply closed, the io.EOF error is returned.
+// If the channel has been closed with an error, that error is returned.
 func (c *C[T]) Read() (T, error) {
 	v, ok := <-c.c
 	if !ok {
@@ -53,7 +55,10 @@ func (c *C[T]) Read() (T, error) {
 	return v, nil
 }
 
-// ReadContext returns io.EOF when the channel is closed.
+// ReadContext performs a blocking read on the channel, but returns if the context expires.
+// If the channel is simply closed, the io.EOF error is returned.
+// If the channel has been closed with an error, that error is returned.
+// If the context expires, the context's error is returned. This does not close the channel.
 func (c *C[T]) ReadContext(ctx context.Context) (T, error) {
 	select {
 	case <-ctx.Done():
@@ -68,13 +73,15 @@ func (c *C[T]) ReadContext(ctx context.Context) (T, error) {
 	}
 }
 
-// ReadChannel allows to access the underlying channel for use with select, you should use Read and ReadContext when you can.
+// ReadChannel allows to access the underlying channel for use with golang's select.
+// You should use Read or ReadContext when you can.
 func (c *C[T]) ReadChannel() <-chan T {
 	return c.c
 }
 
-// Range iterate on the channel values in the same fashion as for a go channel.
-// It will return an error if either the given function return an error, or the channel carry an error.
+// Range calls the given function on the channel values until the channel get closed.
+// If the channel is simply closed, no error is returned.
+// If the channel had been closed with an error, this error is returned.
 func (c *C[T]) Range(fn func(T) error) error {
 	for {
 		v, err := c.Read()
@@ -91,8 +98,10 @@ func (c *C[T]) Range(fn func(T) error) error {
 	}
 }
 
-// RangeContext iterate on the channel values in the same fashion as for a go channel.
-// It will return an error if the given function return an error, the channel carry an error, or if the context is cancelled.
+// RangeContext calls the given function on the channel values until the channel get closed or the context expires.
+// If the channel is simply closed, no error is returned.
+// If the channel had been closed with an error, this error is returned.
+// If the context expire, the iteration stops and the context's error is returned. This does not close the channel.
 func (c *C[T]) RangeContext(ctx context.Context, fn func(T) error) error {
 	for {
 		v, err := c.ReadContext(ctx)
@@ -110,7 +119,8 @@ func (c *C[T]) RangeContext(ctx context.Context, fn func(T) error) error {
 }
 
 // Rest reads all the values in the channel until it closes, and return them all at once.
-// If an error occurs, partial results are returned.
+// If the channel is simply closed, no error is returned.
+// If the channel had been closed with an error, this error is returned.
 func (c *C[T]) Rest() ([]T, error) {
 	res := append([]T(nil), make([]T, len(c.c))...) // preallocate space if known.
 	for {
@@ -127,7 +137,10 @@ func (c *C[T]) Rest() ([]T, error) {
 }
 
 // RestContext reads all the values in the channel until it closes, and return them all at once.
-// If an error occurs, partial results are returned.
+// If the channel is simply closed, no error is returned.
+// If the channel had been closed with an error, this error is returned.
+// If the context expire, the iteration stops and the context's error is returned along with possibly partial results.
+// This does not close the channel.
 func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
 	res := append([]T(nil), make([]T, len(c.c))...) // preallocate space if known.
 	for {
@@ -145,9 +158,10 @@ func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
 
 // Intercept construct another C with the given fn intercepting every value read.
 // This is useful for example to write a wrapper operating on an underlying channel.
-// If the intercepting function return an error, the value is not propagated into the output channel.
+// If the intercepting function return an error, the output channel is closed with that error.
+// Any error set on the underlying channel is replicated onto the output channel.
 func (c *C[T]) Intercept(fn func(T) error) *C[T] {
-	// output with zero capacity, we don't want to add buffering
+	// output with zero capacity, we don't want to add another buffering
 	out := New[T]()
 
 	go func() {
@@ -172,8 +186,11 @@ func (c *C[T]) Intercept(fn func(T) error) *C[T] {
 // InterceptContext construct another C with the given fn intercepting every value read.
 // This is useful for example to write a wrapper operating on an underlying channel.
 // If the intercepting function return an error, the value is not propagated into the output channel.
+// Any error set on the underlying channel is replicated onto the output channel.
+// If the context expire, the iteration stops and the context's error is returned. This does not close the underlying
+// channel, but does close the output channel.
 func (c *C[T]) InterceptContext(ctx context.Context, fn func(T) error) *C[T] {
-	// output with zero capacity, we don't want to add buffering
+	// output with zero capacity, we don't want to add another buffering
 	out := New[T]()
 
 	go func() {
@@ -195,7 +212,7 @@ func (c *C[T]) InterceptContext(ctx context.Context, fn func(T) error) *C[T] {
 }
 
 // Len returns the number of elements queued (unread) in the channel buffer.
-// If v is nil, len(v) is zero.
+// If the channel is not buffered, Len returns zero.
 func (c *C[T]) Len() int {
 	return len(c.c)
 }
@@ -207,18 +224,20 @@ func (c *C[T]) Cap() int {
 }
 
 // Err allows to access the error when the channel passed by ReadChannel is viewed closed.
-// This is threadunsafe if called when the channel is not closed.
+// This is not thread-safe if called when the channel is not closed.
 func (c *C[T]) Err() error {
 	return c.err
 }
 
-// Write panic if writing to a closed channel.
+// Write performs a blocking write of a value to the channel.
+// It panics if writing to a closed channel.
 func (c *C[T]) Write(v T) {
 	c.c <- v
 }
 
-// WriteContext panic if writing to a closed channel.
-// And error is returned when ctx.Done() was closed.
+// WriteContext performs a blocking write of a value to the channel, but returns if the context expires.
+// It panics if writing to a closed channel.
+// If the context expires, the context's error is returned. This does not close the channel.
 func (c *C[T]) WriteContext(ctx context.Context, v T) error {
 	select {
 	case <-ctx.Done():
@@ -228,15 +247,17 @@ func (c *C[T]) WriteContext(ctx context.Context, v T) error {
 	}
 }
 
-// WriteChannel allows to access the underlying channel for use with select, you should use Write and WriteContext when you can.
+// WriteChannel allows to access the underlying channel for use with golang's select.
+// You should use Write or WriteContext when you can.
 func (c *C[T]) WriteChannel() chan<- T {
 	return c.c
 }
 
-// SetError will panic if an error is already set.
+// SetError records the given error as the sticky error of this channel.
+// It will panic if an error has already been set.
 // It will replace err with io.EOF if err is nil.
 // It will never block.
-// It is not threadsafe with any write operation.
+// It is not thread-safe with any write operation.
 func (c *C[T]) SetError(err error) {
 	if c.err != nil {
 		panic("setting error on an already errored channel")
@@ -247,10 +268,10 @@ func (c *C[T]) SetError(err error) {
 	c.err = err
 }
 
-// Close will set the error to io.EOF is it is not already set and then close the channel.
+// Close will set the sticky error to io.EOF if it is not already set and then close the channel.
 // It will never block.
 // It will panic if trying to close an already closed channel.
-// It is not threadsafe with any write operation.
+// It is not thread-safe with any write operation.
 func (c *C[T]) Close() {
 	if c.err == nil {
 		c.err = io.EOF
@@ -258,11 +279,11 @@ func (c *C[T]) Close() {
 	close(c.c)
 }
 
-// CloseWithError will close the channel with the provided error and then close the channel.
+// CloseWithError will close the channel with the given error and then close the channel.
 // It will replace err with io.EOF if err is nil.
 // It will never block.
 // It will panic if trying to close an already closed channel.
-// It is not threadsafe with any write operation.
+// It is not thread-safe with any write operation.
 func (c *C[T]) CloseWithError(err error) {
 	c.SetError(err)
 	c.Close()
