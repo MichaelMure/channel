@@ -6,7 +6,8 @@ func ExampleC() {
 	// Create a buffered channel
 	c := NewWithSize[int](3)
 
-	// Get the read-only and write-only variant. This allows to enforce the restriction in your typed interfaces.
+	// Get the read-only and write-only variant. This allows to enforce the
+	// restriction in your typed interfaces.
 	wo := c.WriteOnly()
 	ro := c.ReadOnly()
 
@@ -15,7 +16,8 @@ func ExampleC() {
 	wo.Write(2)
 	wo.Write(3)
 
-	// ... and read them from the other side. We'll also return an error for later on the last value.
+	// ... and read them from the other side. We'll also return an error
+	// for later on the last value.
 	err := ro.Range(func(i int) error {
 		fmt.Println(i)
 		if i == 3 {
@@ -27,8 +29,8 @@ func ExampleC() {
 	// We got an error while reading values:
 	fmt.Println(err)
 
-	// Major improvement compared to raw channel, that error is sticky, so all consumers of the channel can
-	// be aware of it by checking the sticky error:
+	// Major improvement compared to raw channel, that error is sticky, so all
+	// consumers of the channel can be aware of it by checking the sticky error:
 	err = ro.Err()
 
 	// Output: 1
