@@ -80,6 +80,10 @@ func (c *C[T]) ReadChannel() <-chan T {
 }
 
 // Range calls the given function on the channel values until the channel get closed.
+// Important: if the given function returns an error, the channel can be left with
+// values to be drained if that was the last possible reader, which can create a
+// goroutine and/or memory leak. You can use Drain or DrainContext to make sure it
+// doesn't happen.
 // If the channel is simply closed, no error is returned.
 // If the channel had been closed with an error, this error is returned.
 func (c *C[T]) Range(fn func(T) error) error {
@@ -99,6 +103,10 @@ func (c *C[T]) Range(fn func(T) error) error {
 }
 
 // RangeContext calls the given function on the channel values until the channel get closed or the context expires.
+// Important: if the given function returns an error, the channel can be left with
+// values to be drained if that was the last possible reader, which can create a
+// goroutine and/or memory leak. You can use Drain or DrainContext to make sure it
+// doesn't happen.
 // If the channel is simply closed, no error is returned.
 // If the channel had been closed with an error, this error is returned.
 // If the context expire, the iteration stops and the context's error is returned. This does not close the channel.
@@ -209,6 +217,26 @@ func (c *C[T]) InterceptContext(ctx context.Context, fn func(T) error) *C[T] {
 	}()
 
 	return out
+}
+
+// Drain read and discard values from the channel until it's closed.
+func (c *C[T]) Drain() {
+	for {
+		_, err := c.Read()
+		if err != nil {
+			return
+		}
+	}
+}
+
+// DrainContext read and discard values from the channel until it's closed or the context expires.
+func (c *C[T]) DrainContext(ctx context.Context) {
+	for {
+		_, err := c.ReadContext(ctx)
+		if err != nil {
+			return
+		}
+	}
 }
 
 // Len returns the number of elements queued (unread) in the channel buffer.

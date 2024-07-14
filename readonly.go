@@ -53,6 +53,16 @@ func (c ReadOnly[T]) InterceptContext(ctx context.Context, fn func(T) error) Rea
 	return c.c.InterceptContext(ctx, fn).ReadOnly()
 }
 
+// Drain is the same as C.Drain
+func (c ReadOnly[T]) Drain() {
+	c.c.Drain()
+}
+
+// DrainContext is the same as C.DrainContext
+func (c ReadOnly[T]) DrainContext(ctx context.Context) {
+	c.c.DrainContext(ctx)
+}
+
 // Len is the same as C.Len
 func (c ReadOnly[T]) Len() int {
 	return c.c.Len()
