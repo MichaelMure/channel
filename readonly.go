@@ -58,6 +58,11 @@ func (c ReadOnly[T]) Len() int {
 	return c.c.Len()
 }
 
+// Cap is the same as C.Cap
+func (c ReadOnly[T]) Cap() int {
+	return c.c.Cap()
+}
+
 // Err is the same as C.Err
 func (c ReadOnly[T]) Err() error {
 	return c.c.Err()

@@ -200,6 +200,12 @@ func (c *C[T]) Len() int {
 	return len(c.c)
 }
 
+// Cap returns the capacity of the channel buffer.
+// If the channel is not buffered, Cap returns zero.
+func (c *C[T]) Cap() int {
+	return cap(c.c)
+}
+
 // Err allows to access the error when the channel passed by ReadChannel is viewed closed.
 // This is threadunsafe if called when the channel is not closed.
 func (c *C[T]) Err() error {
