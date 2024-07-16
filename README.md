@@ -65,10 +65,9 @@ all, err := c.RestContext(ctx)
 ### Intercept values in a wrapper
 
 ```go
-out := c.Intercept(func(i int) error {
+outChan := c.Intercept(func(i int) error {
 	// do something with i
 })
-return out
 ```
 
 ### Close and error
