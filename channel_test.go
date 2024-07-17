@@ -32,6 +32,13 @@ func makeProducerNoClose(count int) *C[int] {
 	return c
 }
 
+func shouldPanic(t *testing.T, f func()) {
+	t.Helper()
+	defer func() { recover() }()
+	f()
+	t.Errorf("should have panicked")
+}
+
 func TestC_New(t *testing.T) {
 	c := New[int]()
 
@@ -856,4 +863,70 @@ func TestC_SetError(t *testing.T) {
 	if !errors.Is(c2.Err(), io.ErrUnexpectedEOF) {
 		t.Errorf("incorrect error")
 	}
+
+	// ---
+
+	c3 := New[int]()
+	c3.SetError(io.ErrUnexpectedEOF)
+
+	shouldPanic(t, func() {
+		c3.SetError(io.ErrClosedPipe)
+	})
+}
+
+func TestC_Close(t *testing.T) {
+	c1 := New[int]()
+
+	c1.Close()
+
+	if c1.Err() != io.EOF {
+		t.Errorf("incorrect error")
+	}
+	if _, valueFromChannel := <-c1.c; valueFromChannel {
+		t.Errorf("channel should be closed")
+	}
+
+	// ---
+
+	c2 := New[int]()
+	c2.Close()
+
+	shouldPanic(t, func() {
+		c2.Close()
+	})
+}
+
+func TestC_CloseWithError(t *testing.T) {
+	c1 := New[int]()
+
+	c1.CloseWithError(nil)
+
+	if c1.Err() != io.EOF {
+		t.Errorf("incorrect error")
+	}
+	if _, valueFromChannel := <-c1.c; valueFromChannel {
+		t.Errorf("channel should be closed")
+	}
+
+	// ---
+
+	c2 := New[int]()
+
+	c2.CloseWithError(io.ErrUnexpectedEOF)
+
+	if !errors.Is(c2.Err(), io.ErrUnexpectedEOF) {
+		t.Errorf("incorrect error")
+	}
+	if _, valueFromChannel := <-c2.c; valueFromChannel {
+		t.Errorf("channel should be closed")
+	}
+
+	// ---
+
+	c3 := New[int]()
+	c3.Close()
+
+	shouldPanic(t, func() {
+		c3.CloseWithError(io.ErrUnexpectedEOF)
+	})
 }
