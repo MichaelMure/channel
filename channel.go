@@ -73,7 +73,7 @@ func (c *C[T]) ReadContext(ctx context.Context) (T, error) {
 	}
 }
 
-// ReadChannel allows to access the underlying channel for use with golang's select.
+// ReadChannel allows accessing the underlying channel for use with golang's select.
 // You should use Read or ReadContext when you can.
 func (c *C[T]) ReadChannel() <-chan T {
 	return c.c
@@ -109,7 +109,7 @@ func (c *C[T]) Range(fn func(T) error) error {
 // doesn't happen.
 // If the channel is simply closed, no error is returned.
 // If the channel had been closed with an error, this error is returned.
-// If the context expire, the iteration stops and the context's error is returned. This does not close the channel.
+// If the context expires, the iteration stops and the context's error is returned. This does not close the channel.
 func (c *C[T]) RangeContext(ctx context.Context, fn func(T) error) error {
 	for {
 		v, err := c.ReadContext(ctx)
@@ -147,7 +147,7 @@ func (c *C[T]) Rest() ([]T, error) {
 // RestContext reads all the values in the channel until it closes, and return them all at once.
 // If the channel is simply closed, no error is returned.
 // If the channel had been closed with an error, this error is returned.
-// If the context expire, the iteration stops and the context's error is returned along with possibly partial results.
+// If the context expires, the iteration stops and the context's error is returned along with possibly partial results.
 // This does not close the channel.
 func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
 	res := append([]T(nil), make([]T, len(c.c))...) // preallocate space if known.
@@ -165,8 +165,8 @@ func (c *C[T]) RestContext(ctx context.Context) ([]T, error) {
 }
 
 // Intercept construct another C with the given fn intercepting every value read.
-// This is useful for example to write a wrapper operating on an underlying channel.
-// If the intercepting function return an error, the output channel is closed with that error.
+// This is useful, for example, to write a wrapper operating on an underlying channel.
+// If the intercepting function returns an error, the output channel is closed with that error.
 // Any error set on the underlying channel is replicated onto the output channel.
 func (c *C[T]) Intercept(fn func(T) error) *C[T] {
 	// output with zero capacity, we don't want to add another buffering
@@ -192,10 +192,10 @@ func (c *C[T]) Intercept(fn func(T) error) *C[T] {
 }
 
 // InterceptContext construct another C with the given fn intercepting every value read.
-// This is useful for example to write a wrapper operating on an underlying channel.
-// If the intercepting function return an error, the value is not propagated into the output channel.
+// This is useful, for example, to write a wrapper operating on an underlying channel.
+// If the intercepting function returns an error, the value is not propagated into the output channel.
 // Any error set on the underlying channel is replicated onto the output channel.
-// If the context expire, the iteration stops and the context's error is returned. This does not close the underlying
+// If the context expires, the iteration stops and the context's error is returned. This does not close the underlying
 // channel, but does close the output channel.
 func (c *C[T]) InterceptContext(ctx context.Context, fn func(T) error) *C[T] {
 	// output with zero capacity, we don't want to add another buffering
@@ -251,7 +251,7 @@ func (c *C[T]) Cap() int {
 	return cap(c.c)
 }
 
-// Err allows to access the error when the channel passed by ReadChannel is viewed closed.
+// Err allows accessing the error when the channel passed by ReadChannel is viewed closed.
 // This is not thread-safe if called when the channel is not closed.
 func (c *C[T]) Err() error {
 	return c.err
@@ -275,7 +275,7 @@ func (c *C[T]) WriteContext(ctx context.Context, v T) error {
 	}
 }
 
-// WriteChannel allows to access the underlying channel for use with golang's select.
+// WriteChannel allows accessing the underlying channel for use with golang's select.
 // You should use Write or WriteContext when you can.
 func (c *C[T]) WriteChannel() chan<- T {
 	return c.c

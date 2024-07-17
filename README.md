@@ -7,7 +7,7 @@ This package is a wrapper around the normal golang's channel, with several impro
 - carry a sticky error that can be read and acted upon by multiple readers, which normal golang channels do not support
 - define a normalized way to carry an error in a channel, without having to create an explicit struct such as `type ValWithError struct { Val int, Err error }`*
 
-`*` This is especially important because one of the core idea of golang is implicit implementation of interfaces. However, when you create such wrapper struct, you force someone creating an alternative implementation of your interface to import your package, only for that explicit struct. This can create dependency problems and is just messy.
+`*` This is especially important because one of the core ideas of golang is implicit implementation of interfaces. However, when you create such wrapper struct, you force someone creating an alternative implementation of your interface to import your package, only for that explicit struct. This can create dependency problems and is just messy.
 
 **This package has zero dependencies.**
 
@@ -78,9 +78,62 @@ c.Close()                             // simple close
 c.CloseWithError(io.ErrUnexpectedEOF) // close with an error
 ```
 
+## Example patterns
+
+### Producer
+
+```go
+func producer(ctx context.Context) channel.ReadOnly[int] {
+	out := channel.New[int]()
+
+	go func() {
+		defer out.Close()
+		
+		for i := 0; i < 10; i++ {
+			_ = out.WriteContext(ctx, i)
+		}
+		
+		err := fmt.Errorf("simulated error")
+		if err != nil {
+			out.SetError(err)
+		}
+	}()
+
+	return out.ReadOnly()
+}
+```
+
+## Wrapper
+
+```go
+func wrapper(ctx context.Context, ch channel.ReadOnly[int]) channel.ReadOnly[int] {
+	return ch.InterceptContext(ctx, func(i int) error {
+		fmt.Println(i)
+		return nil
+	})
+}
+```
+
+## Consumer
+
+```go
+func consumer(ctx context.Context) error {
+	ch := producer(ctx)
+
+	return ch.RangeContext(ctx, func(i int) error {
+		if i > 5 {
+			ch.DrainContext(ctx)
+			return fmt.Errorf("simulated error")
+		}
+		fmt.Println(i)
+		return nil
+	})
+}
+```
+
 ## Note
 
-Original idea and implementation by Jorropo.
+Original idea and implementation by [Jorropo](https://github.com/Jorropo).
 
 ## License
 
