@@ -140,6 +140,24 @@ func TestC_ReadContext(t *testing.T) {
 	}
 }
 
+func TestC_ReadChannel(t *testing.T) {
+	c := makeProducerNoClose(2)
+
+	v := <-c.ReadChannel()
+	if v != 1 {
+		t.Errorf("unexpected value")
+	}
+
+	select {
+	case v = <-c.ReadChannel():
+	default:
+	}
+
+	if v != 2 {
+		t.Errorf("unexpected value")
+	}
+}
+
 func TestC_Range(t *testing.T) {
 	c1 := makeProducer(2)
 
@@ -555,5 +573,287 @@ func TestC_InterceptContext(t *testing.T) {
 	}
 	if _, valueFromChannel := <-out.c; valueFromChannel {
 		t.Errorf("out channel should be closed")
+	}
+}
+
+func TestC_Drain(t *testing.T) {
+	c1 := makeProducer(10)
+
+	c1.Drain()
+
+	all, err := c1.Rest()
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if len(all) != 0 {
+		t.Errorf("incorrect len")
+	}
+	if _, valueFromChannel := <-c1.c; valueFromChannel {
+		t.Errorf("channel should be closed")
+	}
+}
+
+func TestC_DrainContext(t *testing.T) {
+	ctx := context.Background()
+
+	c1 := makeProducer(10)
+
+	c1.DrainContext(ctx)
+
+	all, err := c1.RestContext(ctx)
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if len(all) != 0 {
+		t.Errorf("incorrect len")
+	}
+	if _, valueFromChannel := <-c1.c; valueFromChannel {
+		t.Errorf("channel should be closed")
+	}
+
+	// ---
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c2 := makeProducer(1)
+
+	cancel()
+
+	c2.DrainContext(ctx)
+
+	// there should still be values in the channel, as the DrainContext execution didn't
+	// proceed, due to the cancelled context
+	all, err = c2.Rest() // no context on purpose
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if len(all) != 1 {
+		t.Errorf("incorrect len")
+	}
+	if _, valueFromChannel := <-c2.c; valueFromChannel {
+		t.Errorf("channel should be closed")
+	}
+}
+
+func TestC_Len(t *testing.T) {
+	c1 := New[int]()
+
+	if c1.Len() != 0 {
+		t.Errorf("incorrect len")
+	}
+
+	// ---
+
+	c2 := NewWithSize[int](5)
+
+	if c2.Len() != 0 {
+		t.Errorf("incorrect len")
+	}
+
+	c2.Write(1)
+	c2.Write(2)
+
+	if c2.Len() != 2 {
+		t.Errorf("incorrect len")
+	}
+
+	// ---
+
+	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+
+	if c3.Len() != 0 {
+		t.Errorf("incorrect len")
+	}
+}
+
+func TestC_Cap(t *testing.T) {
+	c1 := New[int]()
+
+	if c1.Cap() != 0 {
+		t.Errorf("incorrect cap")
+	}
+
+	// ---
+
+	c2 := NewWithSize[int](5)
+
+	if c2.Cap() != 5 {
+		t.Errorf("incorrect cap")
+	}
+
+	c2.Write(1)
+	c2.Write(2)
+
+	if c2.Cap() != 5 {
+		t.Errorf("incorrect cap")
+	}
+
+	// ---
+
+	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+
+	if c3.Cap() != 0 {
+		t.Errorf("incorrect cap")
+	}
+}
+
+func TestC_Err(t *testing.T) {
+	c1 := New[int]()
+
+	if c1.Err() != nil {
+		t.Errorf("unexpected error")
+	}
+
+	c1.Close()
+
+	if !errors.Is(c1.Err(), io.EOF) {
+		t.Errorf("incorrect error")
+	}
+
+	// ---
+
+	c2 := New[int]()
+
+	c2.SetError(io.ErrUnexpectedEOF)
+
+	if !errors.Is(c2.Err(), io.ErrUnexpectedEOF) {
+		t.Errorf("incorrect error")
+	}
+
+	// ---
+
+	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+
+	if !errors.Is(c3.Err(), io.ErrUnexpectedEOF) {
+		t.Errorf("incorrect error")
+	}
+}
+
+func TestWrite(t *testing.T) {
+	c := New[int]()
+
+	go func() {
+		c.Write(1)
+		c.Write(2)
+		c.Close()
+	}()
+
+	v, err := c.Read()
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if v != 1 {
+		t.Errorf("unexpected value")
+	}
+
+	v, err = c.Read()
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if v != 2 {
+		t.Errorf("unexpected value")
+	}
+}
+
+func TestC_WriteContext(t *testing.T) {
+	ctx := context.Background()
+
+	c1 := New[int]()
+
+	go func() {
+		err := c1.WriteContext(ctx, 1)
+		if err != nil {
+			t.Errorf("unexpected error")
+		}
+		err = c1.WriteContext(ctx, 2)
+		if err != nil {
+			t.Errorf("unexpected error")
+		}
+		c1.Close()
+	}()
+
+	v, err := c1.Read()
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if v != 1 {
+		t.Errorf("unexpected value")
+	}
+
+	v, err = c1.Read()
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if v != 2 {
+		t.Errorf("unexpected value")
+	}
+
+	// ---
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	c2 := New[int]()
+
+	err = c2.WriteContext(ctx, 1)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("unexpected error")
+	}
+
+	if c2.Len() != 0 {
+		t.Errorf("channel should be empty")
+	}
+
+	c2.Close()
+}
+
+func TestC_WriteChannel(t *testing.T) {
+	c := NewWithSize[int](1)
+
+	c.WriteChannel() <- 1
+
+	v, err := c.Read()
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if v != 1 {
+		t.Errorf("unexpected value")
+	}
+
+	select {
+	case c.WriteChannel() <- 2:
+	default:
+	}
+
+	v, err = c.Read()
+	if err != nil {
+		t.Errorf("unexpected error")
+	}
+	if v != 2 {
+		t.Errorf("unexpected value")
+	}
+}
+
+func TestC_SetError(t *testing.T) {
+	c1 := New[int]()
+
+	if c1.Err() != nil {
+		t.Errorf("unexpected error")
+	}
+
+	c1.SetError(nil)
+
+	if c1.Err() != io.EOF {
+		t.Errorf("incorrect error")
+	}
+
+	// ---
+
+	c2 := New[int]()
+
+	c2.SetError(io.ErrUnexpectedEOF)
+
+	if !errors.Is(c2.Err(), io.ErrUnexpectedEOF) {
+		t.Errorf("incorrect error")
 	}
 }

@@ -96,6 +96,7 @@ func producer(ctx context.Context) channel.ReadOnly[int] {
 		err := fmt.Errorf("simulated error")
 		if err != nil {
 			out.SetError(err)
+			return
 		}
 	}()
 
