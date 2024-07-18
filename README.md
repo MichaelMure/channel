@@ -5,9 +5,9 @@ This package is a wrapper around the normal golang's channel, with several impro
 - built-in support for **go context** for easy termination
 - provides explicit `ReadOnly` and `WriteOnly` variations to document and enforce behaviors
 - carry a **sticky error** that can be read and acted upon by **multiple readers**, which normal golang channels do not support
-- define a **normalized way to carry an error** in a channel, without having to create an explicit struct such as `type ValWithError struct { Val int, Err error }`*
+- define a **normalized way to carry an error** in a channel, without having to create an explicit struct such as `type ValWithError struct { Val int, Err error }` `**`
 
-`*` This is especially important because one of the core ideas of golang is implicit implementation of interfaces. However, when you create such wrapper struct, you force someone creating an alternative implementation of your interface to import your package, only for that explicit struct. This can create dependency problems and is just messy.
+`**` This is especially important because one of the core ideas of golang is implicit implementation of interfaces. However, when you create such wrapper struct, you force someone creating an alternative implementation of your interface to import your package, only for that explicit struct. This can create dependency problems and is just messy.
 
 **This package has zero dependencies, and 100% code coverage.**
 
