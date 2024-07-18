@@ -7,81 +7,11 @@ import (
 	"testing"
 )
 
-func makeProducer(count int) *C[int] {
-	c := New[int]()
-
-	go func() {
-		defer c.Close()
-		for i := 1; i < count+1; i++ {
-			c.Write(i)
-		}
-	}()
-
-	return c
-}
-
-func makeProducerNoClose(count int) *C[int] {
-	c := New[int]()
-
-	go func() {
-		for i := 1; i < count+1; i++ {
-			c.Write(i)
-		}
-	}()
-
-	return c
-}
-
-func shouldPanic(t *testing.T, f func()) {
-	t.Helper()
-	defer func() { recover() }()
-	f()
-	t.Errorf("should have panicked")
-}
-
-func TestC_New(t *testing.T) {
-	c := New[int]()
-
-	if len(c.c) != 0 {
-		t.Errorf("incorrect len")
-	}
-	if cap(c.c) != 0 {
-		t.Errorf("incorrect cap")
-	}
-}
-
-func TestC_NewWithSize(t *testing.T) {
-	c := NewWithSize[int](2)
-
-	c.Write(123)
-
-	if len(c.c) != 1 {
-		t.Errorf("incorrect len")
-	}
-	if cap(c.c) != 2 {
-		t.Errorf("incorrect cap")
-	}
-}
-
-func TestC_NewWithError(t *testing.T) {
-	c := NewWithError[int](io.ErrUnexpectedEOF)
-
-	if len(c.c) != 0 {
-		t.Errorf("incorrect len")
-	}
-	if cap(c.c) != 0 {
-		t.Errorf("incorrect cap")
-	}
-	_, err := c.Read()
-	if !errors.Is(err, io.ErrUnexpectedEOF) {
-		t.Errorf("incorrect error")
-	}
-}
-
-func TestC_Read(t *testing.T) {
+func TestReadOnly_Read(t *testing.T) {
 	c := makeProducerNoClose(2)
+	cro := c.ReadOnly()
 
-	v, err := c.Read()
+	v, err := cro.Read()
 	if err != nil {
 		t.Error(err)
 	}
@@ -89,7 +19,7 @@ func TestC_Read(t *testing.T) {
 		t.Errorf("unexpected value")
 	}
 
-	v, err = c.Read()
+	v, err = cro.Read()
 	if err != nil {
 		t.Error(err)
 	}
@@ -99,18 +29,19 @@ func TestC_Read(t *testing.T) {
 
 	c.Close()
 
-	v, err = c.Read()
+	v, err = cro.Read()
 	if err != io.EOF {
 		t.Errorf("incorrect error")
 	}
 }
 
-func TestC_ReadContext(t *testing.T) {
+func TestReadOnly_ReadContext(t *testing.T) {
 	ctx := context.Background()
 
 	c1 := makeProducerNoClose(2)
+	cro1 := c1.ReadOnly()
 
-	v, err := c1.ReadContext(ctx)
+	v, err := cro1.ReadContext(ctx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -118,7 +49,7 @@ func TestC_ReadContext(t *testing.T) {
 		t.Errorf("unexpected value")
 	}
 
-	v, err = c1.ReadContext(ctx)
+	v, err = cro1.ReadContext(ctx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -128,7 +59,7 @@ func TestC_ReadContext(t *testing.T) {
 
 	c1.Close()
 
-	v, err = c1.ReadContext(ctx)
+	v, err = cro1.ReadContext(ctx)
 	if !errors.Is(err, io.EOF) {
 		t.Errorf("incorrect error")
 	}
@@ -138,25 +69,27 @@ func TestC_ReadContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c2 := makeProducer(1)
+	cro2 := c2.ReadOnly()
 
 	cancel()
 
-	_, err = c2.ReadContext(ctx)
+	_, err = cro2.ReadContext(ctx)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("incorrect error")
 	}
 }
 
-func TestC_ReadChannel(t *testing.T) {
+func TestReadOnly_ReadChannel(t *testing.T) {
 	c := makeProducerNoClose(2)
+	cro := c.ReadOnly()
 
-	v := <-c.ReadChannel()
+	v := <-cro.ReadChannel()
 	if v != 1 {
 		t.Errorf("unexpected value")
 	}
 
 	select {
-	case v = <-c.ReadChannel():
+	case v = <-cro.ReadChannel():
 	default:
 	}
 
@@ -165,12 +98,13 @@ func TestC_ReadChannel(t *testing.T) {
 	}
 }
 
-func TestC_Range(t *testing.T) {
+func TestReadOnly_Range(t *testing.T) {
 	c1 := makeProducer(2)
+	cro1 := c1.ReadOnly()
 
 	var all []int
 
-	err := c1.Range(func(val int) error {
+	err := cro1.Range(func(val int) error {
 		all = append(all, val)
 		return nil
 	})
@@ -191,9 +125,10 @@ func TestC_Range(t *testing.T) {
 	// ---
 
 	c2 := makeProducer(2)
+	cro2 := c2.ReadOnly()
 
-	err = c2.Range(func(i int) error {
-		c2.Drain()
+	err = cro2.Range(func(i int) error {
+		cro2.Drain()
 		return io.ErrUnexpectedEOF
 	})
 
@@ -204,8 +139,9 @@ func TestC_Range(t *testing.T) {
 	// ---
 
 	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro3 := c3.ReadOnly()
 
-	err = c3.Range(func(i int) error {
+	err = cro3.Range(func(i int) error {
 		t.Errorf("should be unreachable")
 		return nil
 	})
@@ -215,14 +151,15 @@ func TestC_Range(t *testing.T) {
 	}
 }
 
-func TestC_RangeContext(t *testing.T) {
+func TestReadOnly_RangeContext(t *testing.T) {
 	ctx := context.Background()
 
 	c1 := makeProducer(2)
+	cro1 := c1.ReadOnly()
 
 	var all []int
 
-	err := c1.RangeContext(ctx, func(val int) error {
+	err := cro1.RangeContext(ctx, func(val int) error {
 		all = append(all, val)
 		return nil
 	})
@@ -243,9 +180,10 @@ func TestC_RangeContext(t *testing.T) {
 	// ---
 
 	c2 := makeProducer(2)
+	cro2 := c2.ReadOnly()
 
-	err = c2.RangeContext(ctx, func(i int) error {
-		c2.Drain()
+	err = cro2.RangeContext(ctx, func(i int) error {
+		cro2.Drain()
 		return io.ErrUnexpectedEOF
 	})
 
@@ -256,8 +194,9 @@ func TestC_RangeContext(t *testing.T) {
 	// ---
 
 	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro3 := c3.ReadOnly()
 
-	err = c3.RangeContext(ctx, func(i int) error {
+	err = cro3.RangeContext(ctx, func(i int) error {
 		t.Errorf("should be unreachable")
 		return nil
 	})
@@ -271,10 +210,11 @@ func TestC_RangeContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c4 := makeProducer(1)
+	cro4 := c4.ReadOnly()
 
 	cancel()
 
-	err = c4.RangeContext(ctx, func(i int) error {
+	err = cro4.RangeContext(ctx, func(i int) error {
 		return nil
 	})
 	if !errors.Is(err, context.Canceled) {
@@ -282,10 +222,11 @@ func TestC_RangeContext(t *testing.T) {
 	}
 }
 
-func TestC_Rest(t *testing.T) {
+func TestReadOnly_Rest(t *testing.T) {
 	c1 := makeProducer(2)
+	cro1 := c1.ReadOnly()
 
-	all, err := c1.Rest()
+	all, err := cro1.Rest()
 	if err != nil {
 		t.Errorf("unexpected error")
 	}
@@ -302,20 +243,22 @@ func TestC_Rest(t *testing.T) {
 	// ---
 
 	c2 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro2 := c2.ReadOnly()
 
-	_, err = c2.Rest()
+	_, err = cro2.Rest()
 
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Errorf("incorrect error")
 	}
 }
 
-func TestC_RestContext(t *testing.T) {
+func TestReadOnly_RestContext(t *testing.T) {
 	ctx := context.Background()
 
 	c1 := makeProducer(2)
+	cro1 := c1.ReadOnly()
 
-	all, err := c1.RestContext(ctx)
+	all, err := cro1.RestContext(ctx)
 	if err != nil {
 		t.Errorf("unexpected error")
 	}
@@ -332,8 +275,9 @@ func TestC_RestContext(t *testing.T) {
 	// ---
 
 	c2 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro2 := c2.ReadOnly()
 
-	_, err = c2.RestContext(ctx)
+	_, err = cro2.RestContext(ctx)
 
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Errorf("incorrect error")
@@ -344,22 +288,24 @@ func TestC_RestContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c3 := makeProducer(1)
+	cro3 := c3.ReadOnly()
 
 	cancel()
 
-	_, err = c3.RestContext(ctx)
+	_, err = cro3.RestContext(ctx)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("incorrect error")
 	}
 }
 
-func TestC_Intercept(t *testing.T) {
+func TestReadOnly_Intercept(t *testing.T) {
 	c1 := makeProducer(2)
+	cro1 := c1.ReadOnly()
 
 	var intercepted []int
 
-	out := c1.Intercept(func(i int) error {
+	out := cro1.Intercept(func(i int) error {
 		intercepted = append(intercepted, i)
 		return nil
 	})
@@ -386,17 +332,18 @@ func TestC_Intercept(t *testing.T) {
 	if intercepted[1] != 2 {
 		t.Errorf("incorrect second value")
 	}
-	if _, valueFromChannel := <-out.c; valueFromChannel {
+	if _, valueFromChannel := <-out.ReadChannel(); valueFromChannel {
 		t.Errorf("out channel should be closed")
 	}
 
 	// ---
 
 	c2 := makeProducer(2)
+	cro2 := c2.ReadOnly()
 
 	intercepted = nil
 
-	out = c2.Intercept(func(i int) error {
+	out = cro2.Intercept(func(i int) error {
 		if i == 2 {
 			return io.ErrUnexpectedEOF
 		}
@@ -423,17 +370,18 @@ func TestC_Intercept(t *testing.T) {
 	if !errors.Is(out.Err(), io.ErrUnexpectedEOF) {
 		t.Errorf("incorrect error")
 	}
-	if _, valueFromChannel := <-out.c; valueFromChannel {
+	if _, valueFromChannel := <-out.ReadChannel(); valueFromChannel {
 		t.Errorf("out channel should be closed")
 	}
 
 	// ---
 
 	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro3 := c3.ReadOnly()
 
 	intercepted = nil
 
-	out = c3.Intercept(func(i int) error {
+	out = cro3.Intercept(func(i int) error {
 		intercepted = append(intercepted, i)
 		return nil
 	})
@@ -448,19 +396,20 @@ func TestC_Intercept(t *testing.T) {
 	if len(intercepted) != 0 {
 		t.Errorf("incorrect len")
 	}
-	if _, valueFromChannel := <-out.c; valueFromChannel {
+	if _, valueFromChannel := <-out.ReadChannel(); valueFromChannel {
 		t.Errorf("out channel should be closed")
 	}
 }
 
-func TestC_InterceptContext(t *testing.T) {
+func TestReadOnly_InterceptContext(t *testing.T) {
 	ctx := context.Background()
 
 	c1 := makeProducer(2)
+	cro1 := c1.ReadOnly()
 
 	var intercepted []int
 
-	out := c1.InterceptContext(ctx, func(i int) error {
+	out := cro1.InterceptContext(ctx, func(i int) error {
 		intercepted = append(intercepted, i)
 		return nil
 	})
@@ -487,17 +436,18 @@ func TestC_InterceptContext(t *testing.T) {
 	if intercepted[1] != 2 {
 		t.Errorf("incorrect second value")
 	}
-	if _, valueFromChannel := <-out.c; valueFromChannel {
+	if _, valueFromChannel := <-out.ReadChannel(); valueFromChannel {
 		t.Errorf("out channel should be closed")
 	}
 
 	// ---
 
 	c2 := makeProducer(2)
+	cro2 := c2.ReadOnly()
 
 	intercepted = nil
 
-	out = c2.InterceptContext(ctx, func(i int) error {
+	out = cro2.InterceptContext(ctx, func(i int) error {
 		if i == 2 {
 			return io.ErrUnexpectedEOF
 		}
@@ -524,17 +474,18 @@ func TestC_InterceptContext(t *testing.T) {
 	if !errors.Is(out.Err(), io.ErrUnexpectedEOF) {
 		t.Errorf("incorrect error")
 	}
-	if _, valueFromChannel := <-out.c; valueFromChannel {
+	if _, valueFromChannel := <-out.ReadChannel(); valueFromChannel {
 		t.Errorf("out channel should be closed")
 	}
 
 	// ---
 
 	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro3 := c3.ReadOnly()
 
 	intercepted = nil
 
-	out = c3.InterceptContext(ctx, func(i int) error {
+	out = cro3.InterceptContext(ctx, func(i int) error {
 		intercepted = append(intercepted, i)
 		return nil
 	})
@@ -549,7 +500,7 @@ func TestC_InterceptContext(t *testing.T) {
 	if len(intercepted) != 0 {
 		t.Errorf("incorrect len")
 	}
-	if _, valueFromChannel := <-out.c; valueFromChannel {
+	if _, valueFromChannel := <-out.ReadChannel(); valueFromChannel {
 		t.Errorf("out channel should be closed")
 	}
 
@@ -558,12 +509,13 @@ func TestC_InterceptContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c4 := makeProducer(1)
+	cro4 := c4.ReadOnly()
 
 	intercepted = nil
 
 	cancel()
 
-	out = c4.InterceptContext(ctx, func(i int) error {
+	out = cro4.InterceptContext(ctx, func(i int) error {
 		intercepted = append(intercepted, i)
 		return nil
 	})
@@ -578,43 +530,45 @@ func TestC_InterceptContext(t *testing.T) {
 	if len(intercepted) != 0 {
 		t.Errorf("incorrect len")
 	}
-	if _, valueFromChannel := <-out.c; valueFromChannel {
+	if _, valueFromChannel := <-out.ReadChannel(); valueFromChannel {
 		t.Errorf("out channel should be closed")
 	}
 }
 
-func TestC_Drain(t *testing.T) {
+func TestReadOnly_Drain(t *testing.T) {
 	c1 := makeProducer(10)
+	cro1 := c1.ReadOnly()
 
-	c1.Drain()
+	cro1.Drain()
 
-	all, err := c1.Rest()
+	all, err := cro1.Rest()
 	if err != nil {
 		t.Errorf("unexpected error")
 	}
 	if len(all) != 0 {
 		t.Errorf("incorrect len")
 	}
-	if _, valueFromChannel := <-c1.c; valueFromChannel {
+	if _, valueFromChannel := <-cro1.ReadChannel(); valueFromChannel {
 		t.Errorf("channel should be closed")
 	}
 }
 
-func TestC_DrainContext(t *testing.T) {
+func TestReadOnly_DrainContext(t *testing.T) {
 	ctx := context.Background()
 
 	c1 := makeProducer(10)
+	cro1 := c1.ReadOnly()
 
-	c1.DrainContext(ctx)
+	cro1.DrainContext(ctx)
 
-	all, err := c1.RestContext(ctx)
+	all, err := cro1.RestContext(ctx)
 	if err != nil {
 		t.Errorf("unexpected error")
 	}
 	if len(all) != 0 {
 		t.Errorf("incorrect len")
 	}
-	if _, valueFromChannel := <-c1.c; valueFromChannel {
+	if _, valueFromChannel := <-cro1.ReadChannel(); valueFromChannel {
 		t.Errorf("channel should be closed")
 	}
 
@@ -623,313 +577,125 @@ func TestC_DrainContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c2 := makeProducer(1)
+	cro2 := c2.ReadOnly()
 
 	cancel()
 
-	c2.DrainContext(ctx)
+	cro2.DrainContext(ctx)
 
 	// there should still be values in the channel, as the DrainContext execution didn't
 	// proceed, due to the cancelled context
-	all, err = c2.Rest() // no context on purpose
+	all, err = cro2.Rest() // no context on purpose
 	if err != nil {
 		t.Errorf("unexpected error")
 	}
 	if len(all) != 1 {
 		t.Errorf("incorrect len")
 	}
-	if _, valueFromChannel := <-c2.c; valueFromChannel {
+	if _, valueFromChannel := <-cro2.ReadChannel(); valueFromChannel {
 		t.Errorf("channel should be closed")
 	}
 }
 
-func TestC_Len(t *testing.T) {
+func TestReadOnly_Len(t *testing.T) {
 	c1 := New[int]()
+	cro1 := c1.ReadOnly()
 
-	if c1.Len() != 0 {
+	if cro1.Len() != 0 {
 		t.Errorf("incorrect len")
 	}
 
 	// ---
 
 	c2 := NewWithSize[int](5)
+	cro2 := c2.ReadOnly()
 
-	if c2.Len() != 0 {
+	if cro2.Len() != 0 {
 		t.Errorf("incorrect len")
 	}
 
 	c2.Write(1)
 	c2.Write(2)
 
-	if c2.Len() != 2 {
+	if cro2.Len() != 2 {
 		t.Errorf("incorrect len")
 	}
 
 	// ---
 
 	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro3 := c3.ReadOnly()
 
-	if c3.Len() != 0 {
+	if cro3.Len() != 0 {
 		t.Errorf("incorrect len")
 	}
 }
 
-func TestC_Cap(t *testing.T) {
+func TestReadOnly_Cap(t *testing.T) {
 	c1 := New[int]()
+	cro1 := c1.ReadOnly()
 
-	if c1.Cap() != 0 {
+	if cro1.Cap() != 0 {
 		t.Errorf("incorrect cap")
 	}
 
 	// ---
 
 	c2 := NewWithSize[int](5)
+	cro2 := c2.ReadOnly()
 
-	if c2.Cap() != 5 {
+	if cro2.Cap() != 5 {
 		t.Errorf("incorrect cap")
 	}
 
 	c2.Write(1)
 	c2.Write(2)
 
-	if c2.Cap() != 5 {
+	if cro2.Cap() != 5 {
 		t.Errorf("incorrect cap")
 	}
 
 	// ---
 
 	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro3 := c3.ReadOnly()
 
-	if c3.Cap() != 0 {
+	if cro3.Cap() != 0 {
 		t.Errorf("incorrect cap")
 	}
 }
 
-func TestC_Err(t *testing.T) {
+func TestReadOnly_Err(t *testing.T) {
 	c1 := New[int]()
+	cro1 := c1.ReadOnly()
 
-	if c1.Err() != nil {
+	if cro1.Err() != nil {
 		t.Errorf("unexpected error")
 	}
 
 	c1.Close()
 
-	if !errors.Is(c1.Err(), io.EOF) {
+	if !errors.Is(cro1.Err(), io.EOF) {
 		t.Errorf("incorrect error")
 	}
 
 	// ---
 
 	c2 := New[int]()
+	cro2 := c2.ReadOnly()
 
 	c2.SetError(io.ErrUnexpectedEOF)
 
-	if !errors.Is(c2.Err(), io.ErrUnexpectedEOF) {
+	if !errors.Is(cro2.Err(), io.ErrUnexpectedEOF) {
 		t.Errorf("incorrect error")
 	}
 
 	// ---
 
 	c3 := NewWithError[int](io.ErrUnexpectedEOF)
+	cro3 := c3.ReadOnly()
 
-	if !errors.Is(c3.Err(), io.ErrUnexpectedEOF) {
+	if !errors.Is(cro3.Err(), io.ErrUnexpectedEOF) {
 		t.Errorf("incorrect error")
 	}
-}
-
-func TestC_Write(t *testing.T) {
-	c := New[int]()
-
-	go func() {
-		c.Write(1)
-		c.Write(2)
-		c.Close()
-	}()
-
-	v, err := c.Read()
-	if err != nil {
-		t.Errorf("unexpected error")
-	}
-	if v != 1 {
-		t.Errorf("unexpected value")
-	}
-
-	v, err = c.Read()
-	if err != nil {
-		t.Errorf("unexpected error")
-	}
-	if v != 2 {
-		t.Errorf("unexpected value")
-	}
-}
-
-func TestC_WriteContext(t *testing.T) {
-	ctx := context.Background()
-
-	c1 := New[int]()
-
-	go func() {
-		err := c1.WriteContext(ctx, 1)
-		if err != nil {
-			t.Errorf("unexpected error")
-		}
-		err = c1.WriteContext(ctx, 2)
-		if err != nil {
-			t.Errorf("unexpected error")
-		}
-		c1.Close()
-	}()
-
-	v, err := c1.Read()
-	if err != nil {
-		t.Errorf("unexpected error")
-	}
-	if v != 1 {
-		t.Errorf("unexpected value")
-	}
-
-	v, err = c1.Read()
-	if err != nil {
-		t.Errorf("unexpected error")
-	}
-	if v != 2 {
-		t.Errorf("unexpected value")
-	}
-
-	// ---
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	c2 := New[int]()
-
-	err = c2.WriteContext(ctx, 1)
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("unexpected error")
-	}
-
-	if c2.Len() != 0 {
-		t.Errorf("channel should be empty")
-	}
-
-	c2.Close()
-}
-
-func TestC_WriteChannel(t *testing.T) {
-	c := NewWithSize[int](1)
-
-	c.WriteChannel() <- 1
-
-	v, err := c.Read()
-	if err != nil {
-		t.Errorf("unexpected error")
-	}
-	if v != 1 {
-		t.Errorf("unexpected value")
-	}
-
-	select {
-	case c.WriteChannel() <- 2:
-	default:
-	}
-
-	v, err = c.Read()
-	if err != nil {
-		t.Errorf("unexpected error")
-	}
-	if v != 2 {
-		t.Errorf("unexpected value")
-	}
-}
-
-func TestC_SetError(t *testing.T) {
-	c1 := New[int]()
-
-	if c1.Err() != nil {
-		t.Errorf("unexpected error")
-	}
-
-	c1.SetError(nil)
-
-	if c1.Err() != io.EOF {
-		t.Errorf("incorrect error")
-	}
-
-	// ---
-
-	c2 := New[int]()
-
-	c2.SetError(io.ErrUnexpectedEOF)
-
-	if !errors.Is(c2.Err(), io.ErrUnexpectedEOF) {
-		t.Errorf("incorrect error")
-	}
-
-	// ---
-
-	c3 := New[int]()
-
-	c3.SetError(io.ErrUnexpectedEOF)
-
-	shouldPanic(t, func() {
-		c3.SetError(io.ErrClosedPipe)
-	})
-}
-
-func TestC_Close(t *testing.T) {
-	c1 := New[int]()
-
-	c1.Close()
-
-	if c1.Err() != io.EOF {
-		t.Errorf("incorrect error")
-	}
-	if _, valueFromChannel := <-c1.c; valueFromChannel {
-		t.Errorf("channel should be closed")
-	}
-
-	// ---
-
-	c2 := New[int]()
-
-	c2.Close()
-
-	shouldPanic(t, func() {
-		c2.Close()
-	})
-}
-
-func TestC_CloseWithError(t *testing.T) {
-	c1 := New[int]()
-
-	c1.CloseWithError(nil)
-
-	if c1.Err() != io.EOF {
-		t.Errorf("incorrect error")
-	}
-	if _, valueFromChannel := <-c1.c; valueFromChannel {
-		t.Errorf("channel should be closed")
-	}
-
-	// ---
-
-	c2 := New[int]()
-
-	c2.CloseWithError(io.ErrUnexpectedEOF)
-
-	if !errors.Is(c2.Err(), io.ErrUnexpectedEOF) {
-		t.Errorf("incorrect error")
-	}
-	if _, valueFromChannel := <-c2.c; valueFromChannel {
-		t.Errorf("channel should be closed")
-	}
-
-	// ---
-
-	c3 := New[int]()
-
-	c3.Close()
-
-	shouldPanic(t, func() {
-		c3.CloseWithError(io.ErrUnexpectedEOF)
-	})
 }
